@@ -10,13 +10,38 @@ function setStoredToken(token) {
   window.localStorage.setItem('eventflow_token', token || '');
 }
 
+function decodeToken(t) {
+  try {
+    if (!t) return null;
+    const parts = t.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    const roles =
+      (payload.realm_access && Array.isArray(payload.realm_access.roles)
+        ? payload.realm_access.roles
+        : []);
+    return {
+      username: payload.preferred_username || payload.email || payload.sub,
+      roles,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const [token, setToken] = useState(getStoredToken());
-  const [tokenStatus, setTokenStatus] = useState(token ? 'token set' : 'no token');
+  const [userInfo, setUserInfo] = useState(decodeToken(getStoredToken()));
+  const [tokenStatus, setTokenStatus] = useState(
+    token && decodeToken(token)
+      ? `logat ca ${decodeToken(token).username}`
+      : 'no token'
+  );
   const [events, setEvents] = useState([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [createResult, setCreateResult] = useState('');
-  const [myTickets, setMyTickets] = useState('');
+  const [myTicketsText, setMyTicketsText] = useState('');
+  const [myTicketsList, setMyTicketsList] = useState([]);
 
   const [evName, setEvName] = useState('');
   const [evLocation, setEvLocation] = useState('');
@@ -30,7 +55,13 @@ export default function App() {
 
   function handleSaveToken() {
     setStoredToken(token);
-    setTokenStatus(token ? 'token set' : 'no token');
+    const info = decodeToken(token);
+    setUserInfo(info);
+    if (info) {
+      setTokenStatus(`logat ca ${info.username} [${info.roles.join(', ')}]`);
+    } else {
+      setTokenStatus('token invalid / no token');
+    }
   }
 
   async function loadEvents() {
@@ -93,7 +124,11 @@ export default function App() {
         },
       });
       const data = await res.json();
-      alert(`Ticket response:\n${JSON.stringify(data, null, 2)}`);
+      if (data && data.code) {
+        alert(`Ticket cumpărat!\nCod bilet: ${data.code}`);
+      } else {
+        alert(`Ticket response:\n${JSON.stringify(data, null, 2)}`);
+      }
       await loadEvents();
     } catch (e) {
       alert(`Error: ${e}`);
@@ -102,10 +137,12 @@ export default function App() {
 
   async function loadMyTickets() {
     if (!token) {
-      setMyTickets('Please paste your token first.');
+      setMyTicketsText('Please paste your token first.');
+      setMyTicketsList([]);
       return;
     }
-    setMyTickets('Loading...');
+    setMyTicketsText('Loading...');
+    setMyTicketsList([]);
     try {
       const res = await fetch(`${API_BASE}/my-tickets`, {
         headers: {
@@ -113,15 +150,34 @@ export default function App() {
         },
       });
       const data = await res.json();
-      setMyTickets(JSON.stringify(data, null, 2));
+      setMyTicketsText(JSON.stringify(data, null, 2));
+      if (Array.isArray(data)) {
+        setMyTicketsList(data);
+      } else {
+        setMyTicketsList([]);
+      }
     } catch (e) {
-      setMyTickets(String(e));
+      setMyTicketsText(String(e));
+      setMyTicketsList([]);
     }
   }
+
+  function openKeycloak() {
+    window.open('http://localhost:8080/realms/eventflow/account/', '_blank');
+  }
+
+  const isOrganizerOrAdmin =
+    userInfo && userInfo.roles && (userInfo.roles.includes('ADMIN') || userInfo.roles.includes('ORGANIZER'));
 
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', background: '#0f172a', minHeight: '100vh', color: '#e5e7eb', padding: '2rem' }}>
       <h1 style={{ color: '#f9fafb' }}>EventFlow – React Ticketing</h1>
+
+      <div style={{ marginBottom: '1rem' }}>
+        <button style={buttonStyle} onClick={openKeycloak}>
+          Loghează-te / Fă-ți cont în Keycloak
+        </button>
+      </div>
 
       <div style={cardStyle}>
         <h2>1. JWT Token (lipit din terminal)</h2>
@@ -168,45 +224,67 @@ export default function App() {
         <div style={{ flex: '1 1 280px' }}>
           <div style={cardStyle}>
             <h2>3. Creează eveniment (ADMIN / ORGANIZER)</h2>
-            <label style={labelStyle}>Name</label>
-            <input style={inputStyle} value={evName} onChange={e => setEvName(e.target.value)} />
+            {!isOrganizerOrAdmin && (
+              <p style={{ fontSize: '0.85rem', color: '#9ca3af' }}>
+                Doar utilizatorii cu rol <strong>ORGANIZER</strong> sau <strong>ADMIN</strong> pot crea evenimente.
+              </p>
+            )}
+            {isOrganizerOrAdmin && (
+              <>
+                <label style={labelStyle}>Name</label>
+                <input style={inputStyle} value={evName} onChange={e => setEvName(e.target.value)} />
 
-            <label style={labelStyle}>Location</label>
-            <input style={inputStyle} value={evLocation} onChange={e => setEvLocation(e.target.value)} />
+                <label style={labelStyle}>Location</label>
+                <input style={inputStyle} value={evLocation} onChange={e => setEvLocation(e.target.value)} />
 
-            <label style={labelStyle}>Starts at (ISO 8601)</label>
-            <input
-              style={inputStyle}
-              value={evStartsAt}
-              onChange={e => setEvStartsAt(e.target.value)}
-              placeholder="2025-12-31T20:00:00"
-            />
+                <label style={labelStyle}>Starts at (ISO 8601)</label>
+                <input
+                  style={inputStyle}
+                  value={evStartsAt}
+                  onChange={e => setEvStartsAt(e.target.value)}
+                  placeholder="2025-12-31T20:00:00"
+                />
 
-            <label style={labelStyle}>Total tickets</label>
-            <input
-              style={inputStyle}
-              type="number"
-              min={1}
-              value={evTickets}
-              onChange={e => setEvTickets(e.target.value)}
-            />
+                <label style={labelStyle}>Total tickets</label>
+                <input
+                  style={inputStyle}
+                  type="number"
+                  min={1}
+                  value={evTickets}
+                  onChange={e => setEvTickets(e.target.value)}
+                />
 
-            <label style={labelStyle}>Description</label>
-            <textarea
-              style={textareaStyle}
-              rows={2}
-              value={evDescription}
-              onChange={e => setEvDescription(e.target.value)}
-            />
+                <label style={labelStyle}>Description</label>
+                <textarea
+                  style={textareaStyle}
+                  rows={2}
+                  value={evDescription}
+                  onChange={e => setEvDescription(e.target.value)}
+                />
 
-            <button style={buttonStyle} onClick={createEvent}>Create event</button>
+                <button style={buttonStyle} onClick={createEvent}>Create event</button>
+              </>
+            )}
             <pre style={preStyle}>{createResult}</pre>
           </div>
 
           <div style={cardStyle}>
             <h2>4. Biletele mele</h2>
             <button style={secondaryButtonStyle} onClick={loadMyTickets}>Load my tickets</button>
-            <pre style={preStyle}>{myTickets}</pre>
+            <div style={{ marginTop: '0.75rem' }}>
+              {myTicketsList.map(t => (
+                <div key={t.id} style={ticketCardStyle}>
+                  <div style={{ fontSize: '0.8rem', color: '#9ca3af' }}>
+                    Event: {t.event?.name || t.event_id} •{' '}
+                    {t.event?.starts_at || t.purchased_at}
+                  </div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 600, letterSpacing: '0.1em' }}>
+                    {t.code}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <pre style={preStyle}>{myTicketsText}</pre>
           </div>
         </div>
       </div>
@@ -293,6 +371,14 @@ const preStyle = {
   overflowX: 'auto',
   border: '1px solid #1f2937',
   marginTop: '0.75rem',
+};
+
+const ticketCardStyle = {
+  borderRadius: '0.5rem',
+  border: '1px dashed #4b5563',
+  padding: '0.5rem 0.75rem',
+  marginBottom: '0.5rem',
+  background: '#020617',
 };
 
 

@@ -86,6 +86,23 @@ class Ticket(db.Model):
         }
 
 
+class BannedUser(db.Model):
+    __tablename__ = 'banned_users'
+
+    id = db.Column(db.Integer, primary_key=True)
+    keycloak_sub = db.Column(db.String(255), unique=True, nullable=False)
+    reason = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'keycloak_sub': self.keycloak_sub,
+            'reason': self.reason,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 # Auth helpers (copiat și simplificat din User Profile Service)
 def verify_token(f):
     """Decorator pentru verificarea JWT token-ului de la Keycloak"""
@@ -155,6 +172,13 @@ def require_role(*allowed_roles):
     return decorator
 
 
+def is_banned(sub: str) -> bool:
+    """Verifică dacă un utilizator este banat pentru ticketing."""
+    if not sub:
+        return False
+    return db.session.query(BannedUser.id).filter_by(keycloak_sub=sub).first() is not None
+
+
 # Routes
 @app.route('/health', methods=['GET'])
 def health():
@@ -212,6 +236,8 @@ def get_event(event_id):
 @verify_token
 def buy_ticket(event_id):
     """Cumpără un bilet pentru utilizatorul curent."""
+    if is_banned(request.user_sub):
+        return jsonify({'error': 'User is banned from buying tickets'}), 403
     event = Event.query.get(event_id)
     if not event:
         return jsonify({'error': 'Event not found'}), 404
@@ -238,8 +264,52 @@ def buy_ticket(event_id):
 @verify_token
 def my_tickets():
     """Listează toate biletele utilizatorului curent."""
+    if is_banned(request.user_sub):
+        return jsonify({'error': 'User is banned'}), 403
     tickets = Ticket.query.filter_by(keycloak_sub=request.user_sub).all()
     return jsonify([t.to_dict() for t in tickets]), 200
+
+
+@app.route('/admin/banned', methods=['GET'])
+@require_role('ADMIN')
+def list_banned():
+    """Listă utilizatori banați (ADMIN)."""
+    banned = BannedUser.query.order_by(BannedUser.created_at.desc()).all()
+    return jsonify([b.to_dict() for b in banned]), 200
+
+
+@app.route('/admin/banned', methods=['POST'])
+@require_role('ADMIN')
+def ban_user():
+    """Ban/unban logic: creează sau actualizează un ban pentru un keycloak_sub."""
+    data = request.get_json() or {}
+    keycloak_sub = data.get('keycloak_sub')
+    reason = data.get('reason', '')
+
+    if not keycloak_sub:
+        return jsonify({'error': 'keycloak_sub is required'}), 400
+
+    banned = BannedUser.query.filter_by(keycloak_sub=keycloak_sub).first()
+    if not banned:
+        banned = BannedUser(keycloak_sub=keycloak_sub, reason=reason)
+        db.session.add(banned)
+    else:
+        banned.reason = reason
+
+    db.session.commit()
+    return jsonify(banned.to_dict()), 201
+
+
+@app.route('/admin/banned/<keycloak_sub>', methods=['DELETE'])
+@require_role('ADMIN')
+def unban_user(keycloak_sub):
+    """Șterge ban-ul unui utilizator (ADMIN)."""
+    banned = BannedUser.query.filter_by(keycloak_sub=keycloak_sub).first()
+    if not banned:
+        return jsonify({'error': 'Not banned'}), 404
+    db.session.delete(banned)
+    db.session.commit()
+    return jsonify({'message': 'User unbanned'}), 200
 
 
 if __name__ == '__main__':

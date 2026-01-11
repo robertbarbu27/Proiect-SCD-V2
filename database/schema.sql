@@ -49,4 +49,13 @@ CREATE TABLE IF NOT EXISTS tickets (
 CREATE INDEX IF NOT EXISTS idx_tickets_event_id ON tickets(event_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_keycloak_sub ON tickets(keycloak_sub);
 
+-- Banned users for ticketing (managed by ADMIN)
+CREATE TABLE IF NOT EXISTS banned_users (
+    id SERIAL PRIMARY KEY,
+    keycloak_sub VARCHAR(255) UNIQUE NOT NULL,
+    reason TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
 
