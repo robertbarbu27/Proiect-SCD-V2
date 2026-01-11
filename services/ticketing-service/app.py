@@ -10,6 +10,7 @@ import jwt
 import requests
 from datetime import datetime
 from functools import wraps
+import secrets
 
 app = Flask(__name__)
 CORS(app)
@@ -71,6 +72,7 @@ class Ticket(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     event_id = db.Column(db.Integer, db.ForeignKey('events.id', ondelete='CASCADE'), nullable=False)
     keycloak_sub = db.Column(db.String(255), nullable=False)
+    code = db.Column(db.String(32), nullable=False)
     purchased_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -78,6 +80,7 @@ class Ticket(db.Model):
             'id': self.id,
             'event_id': self.event_id,
             'keycloak_sub': self.keycloak_sub,
+            'code': self.code,
             'purchased_at': self.purchased_at.isoformat() if self.purchased_at else None,
             'event': self.event.to_dict() if self.event else None,
         }
@@ -216,9 +219,12 @@ def buy_ticket(event_id):
     if event.remaining_tickets() <= 0:
         return jsonify({'error': 'No tickets available'}), 400
 
+    ticket_code = secrets.token_hex(4)  # ex: 8 hex chars, ușor de citit în demo
+
     ticket = Ticket(
         event_id=event.id,
         keycloak_sub=request.user_sub,
+        code=ticket_code,
     )
     event.tickets_sold += 1
 
