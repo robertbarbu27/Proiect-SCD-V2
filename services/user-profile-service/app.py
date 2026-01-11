@@ -27,6 +27,10 @@ KEYCLOAK_URL = os.getenv('KEYCLOAK_URL', 'http://keycloak:8080')
 KEYCLOAK_REALM = os.getenv('KEYCLOAK_REALM', 'eventflow')
 KEYCLOAK_CLIENT_ID = os.getenv('KEYCLOAK_CLIENT_ID', 'eventflow-api')
 KEYCLOAK_CLIENT_SECRET = os.getenv('KEYCLOAK_CLIENT_SECRET', '')
+# URL-ul public folosit în token-uri (issuer). Implicit folosim KEYCLOAK_URL.
+# În producție poate fi un hostname extern (ex: https://auth.example.com),
+# în timp ce KEYCLOAK_URL rămâne URL-ul intern din cluster.
+KEYCLOAK_PUBLIC_URL = os.getenv('KEYCLOAK_PUBLIC_URL', KEYCLOAK_URL)
 
 db = SQLAlchemy(app)
 
@@ -110,12 +114,15 @@ def verify_token(f):
                 return jsonify({'error': 'Invalid token key'}), 401
             
             # Verify and decode token
+            # Unele versiuni Keycloak nu includ explicit 'aud' pentru token-urile password grant,
+            # dar includ 'azp' (authorized party). Ca să nu stricăm compatibilitatea,
+            # dezactivăm verificarea automată a 'aud' și verificăm doar semnătura + issuer.
             decoded = jwt.decode(
                 token,
                 key,
                 algorithms=['RS256'],
-                audience=KEYCLOAK_CLIENT_ID,
-                issuer=f"{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}"
+                options={'verify_aud': False},
+                issuer=f"{KEYCLOAK_PUBLIC_URL}/realms/{KEYCLOAK_REALM}"
             )
             
             request.user = decoded

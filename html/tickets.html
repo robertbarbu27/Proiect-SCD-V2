@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>EventFlow Tickets</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      margin: 0;
+      padding: 2rem;
+    }
+    h1, h2 {
+      color: #f9fafb;
+    }
+    .card {
+      background: #020617;
+      border-radius: 0.75rem;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+      border: 1px solid #1f2937;
+      box-shadow: 0 10px 25px rgba(15,23,42,0.8);
+    }
+    label {
+      font-size: 0.875rem;
+      color: #9ca3af;
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.5rem;
+      border: 1px solid #374151;
+      background: #020617;
+      color: #e5e7eb;
+      font-family: inherit;
+      font-size: 0.875rem;
+      margin-bottom: 0.75rem;
+    }
+    input:focus, textarea:focus {
+      outline: 2px solid #3b82f6;
+      outline-offset: 1px;
+      border-color: transparent;
+    }
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 0.45rem 0.9rem;
+      font-size: 0.85rem;
+      cursor: pointer;
+      background: #3b82f6;
+      color: white;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+    button.secondary {
+      background: #111827;
+      color: #e5e7eb;
+      border: 1px solid #374151;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .col {
+      flex: 1 1 280px;
+    }
+    .event {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+    .event-meta {
+      font-size: 0.8rem;
+      color: #9ca3af;
+    }
+    pre {
+      font-size: 0.8rem;
+      background: #020617;
+      padding: 0.75rem;
+      border-radius: 0.5rem;
+      overflow-x: auto;
+      border: 1px solid #1f2937;
+    }
+    .badge {
+      font-size: 0.7rem;
+      padding: 0.1rem 0.45rem;
+      border-radius: 999px;
+      border: 1px solid #4b5563;
+      color: #9ca3af;
+    }
+  </style>
+</head>
+<body>
+  <h1>EventFlow – Ticketing Demo</h1>
+
+  <div class="card">
+    <h2>1. JWT Token (copiat din terminal)</h2>
+    <label for="token">Access token (Bearer):</label>
+    <textarea id="token" rows="3" placeholder="Lipește aici token-ul primit de la Keycloak..."></textarea>
+    <button id="saveTokenBtn">Save token</button>
+    <span id="tokenStatus" class="badge">no token</span>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <div class="card">
+        <h2>2. Evenimente</h2>
+        <button id="refreshEventsBtn" class="secondary">Refresh events</button>
+        <div id="eventsContainer"></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <h2>3. Creează eveniment (ADMIN / ORGANIZER)</h2>
+        <label for="evName">Name</label>
+        <input id="evName" placeholder="Ex: Concert Rock" />
+
+        <label for="evLocation">Location</label>
+        <input id="evLocation" placeholder="Ex: Sala Palatului" />
+
+        <label for="evStartsAt">Starts at (ISO 8601)</label>
+        <input id="evStartsAt" placeholder="2025-12-31T20:00:00" />
+
+        <label for="evTickets">Total tickets</label>
+        <input id="evTickets" type="number" min="1" value="100" />
+
+        <label for="evDescription">Description</label>
+        <textarea id="evDescription" rows="2"></textarea>
+
+        <button id="createEventBtn">Create event</button>
+        <pre id="createEventResult"></pre>
+      </div>
+
+      <div class="card">
+        <h2>4. Biletele mele</h2>
+        <button id="myTicketsBtn" class="secondary">Load my tickets</button>
+        <pre id="myTicketsResult"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:3005';
+
+    function getToken() {
+      return window.localStorage.getItem('eventflow_token') || '';
+    }
+
+    function setToken(token) {
+      window.localStorage.setItem('eventflow_token', token || '');
+      document.getElementById('tokenStatus').textContent = token ? 'token set' : 'no token';
+    }
+
+    document.getElementById('saveTokenBtn').addEventListener('click', () => {
+      const token = document.getElementById('token').value.trim();
+      setToken(token);
+    });
+
+    document.getElementById('refreshEventsBtn').addEventListener('click', loadEvents);
+    document.getElementById('createEventBtn').addEventListener('click', createEvent);
+    document.getElementById('myTicketsBtn').addEventListener('click', loadMyTickets);
+
+    async function loadEvents() {
+      const container = document.getElementById('eventsContainer');
+      container.innerHTML = 'Loading...';
+      try {
+        const res = await fetch(API_BASE + '/events');
+        const events = await res.json();
+        if (!Array.isArray(events)) {
+          container.innerHTML = '<pre>' + JSON.stringify(events, null, 2) + '</pre>';
+          return;
+        }
+        if (events.length === 0) {
+          container.innerHTML = '<p>No events yet.</p>';
+          return;
+        }
+        container.innerHTML = '';
+        events.forEach(ev => {
+          const div = document.createElement('div');
+          div.className = 'event';
+          const left = document.createElement('div');
+          left.innerHTML = '<strong>' + ev.name + '</strong><div class="event-meta">' +
+            (ev.location || '') + ' • ' + (ev.starts_at || '') +
+            '<br/>Tickets: ' + ev.tickets_sold + ' / ' + ev.total_tickets +
+            ' (left ' + ev.remaining_tickets + ')</div>';
+          const btn = document.createElement('button');
+          btn.textContent = 'Buy ticket';
+          btn.onclick = () => buyTicket(ev.id);
+          div.appendChild(left);
+          div.appendChild(btn);
+          container.appendChild(div);
+        });
+      } catch (e) {
+        container.innerHTML = '<pre>' + e + '</pre>';
+      }
+    }
+
+    async function createEvent() {
+      const result = document.getElementById('createEventResult');
+      result.textContent = 'Sending...';
+      const token = getToken();
+      if (!token) {
+        result.textContent = 'Please paste a valid ADMIN / ORGANIZER token first.';
+        return;
+      }
+      const body = {
+        name: document.getElementById('evName').value,
+        location: document.getElementById('evLocation').value,
+        starts_at: document.getElementById('evStartsAt').value,
+        total_tickets: parseInt(document.getElementById('evTickets').value || '0', 10),
+        description: document.getElementById('evDescription').value,
+      };
+      try {
+        const res = await fetch(API_BASE + '/events', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token,
+          },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        result.textContent = JSON.stringify(data, null, 2);
+        loadEvents();
+      } catch (e) {
+        result.textContent = String(e);
+      }
+    }
+
+    async function buyTicket(eventId) {
+      const token = getToken();
+      if (!token) {
+        alert('Please paste your token first.');
+        return;
+      }
+      try {
+        const res = await fetch(API_BASE + '/events/' + eventId + '/tickets', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + token,
+          },
+        });
+        const data = await res.json();
+        alert('Response: ' + JSON.stringify(data, null, 2));
+        loadEvents();
+      } catch (e) {
+        alert('Error: ' + e);
+      }
+    }
+
+    async function loadMyTickets() {
+      const token = getToken();
+      const out = document.getElementById('myTicketsResult');
+      if (!token) {
+        out.textContent = 'Please paste your token first.';
+        return;
+      }
+      out.textContent = 'Loading...';
+      try {
+        const res = await fetch(API_BASE + '/my-tickets', {
+          headers: { 'Authorization': 'Bearer ' + token },
+        });
+        const data = await res.json();
+        out.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        out.textContent = String(e);
+      }
+    }
+
+    // Init
+    document.getElementById('token').value = getToken();
+    setToken(getToken());
+    loadEvents();
+  </script>
+</body>
+</html>
+
+
+
+
