@@ -11,6 +11,9 @@ import requests
 from datetime import datetime
 from functools import wraps
 import secrets
+import pika
+import json
+import time
 
 app = Flask(__name__)
 CORS(app)
@@ -74,6 +77,8 @@ class Ticket(db.Model):
     keycloak_sub = db.Column(db.String(255), nullable=False)
     code = db.Column(db.String(32), nullable=False)
     purchased_at = db.Column(db.DateTime, default=datetime.utcnow)
+    used_at = db.Column(db.DateTime, nullable=True)
+    used_by = db.Column(db.String(255), nullable=True)  # keycloak_sub al staff-ului care a validat
 
     def to_dict(self):
         return {
@@ -82,6 +87,8 @@ class Ticket(db.Model):
             'keycloak_sub': self.keycloak_sub,
             'code': self.code,
             'purchased_at': self.purchased_at.isoformat() if self.purchased_at else None,
+            'used_at': self.used_at.isoformat() if self.used_at else None,
+            'used_by': self.used_by,
             'event': self.event.to_dict() if self.event else None,
         }
 
@@ -179,6 +186,66 @@ def is_banned(sub: str) -> bool:
     return db.session.query(BannedUser.id).filter_by(keycloak_sub=sub).first() is not None
 
 
+def rate_limit(max_requests: int = 2, window_seconds: int = 60):
+    """
+    Rate limiting simplu în memorie, per utilizator (keycloak_sub).
+    Pentru demo este suficient (avem un singur replica), dar în producție
+    s-ar folosi un storage partajat (Redis, etc.).
+    """
+    store = {}
+
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            user_sub = getattr(request, 'user_sub', None)
+            if not user_sub:
+                return jsonify({'error': 'Missing user context for rate limiting'}), 401
+
+            now = time.time()
+            timestamps = [t for t in store.get(user_sub, []) if now - t < window_seconds]
+
+            if len(timestamps) >= max_requests:
+                return jsonify({
+                    'error': 'Too many requests',
+                    'limit': max_requests,
+                    'window_seconds': window_seconds
+                }), 429
+
+            timestamps.append(now)
+            store[user_sub] = timestamps
+            return f(*args, **kwargs)
+
+        return wrapped
+
+    return decorator
+
+
+def publish_ticket_notification(ticket):
+    """Trimite un mesaj în RabbitMQ când se cumpără un bilet."""
+    try:
+        rabbit_host = os.getenv('RABBITMQ_HOST', 'rabbitmq')
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host=rabbit_host))
+        channel = connection.channel()
+        channel.queue_declare(queue='ticket_booked', durable=False)
+
+        payload = {
+            'event_id': ticket.event_id,
+            'organizer_sub': ticket.event.created_by if ticket.event else None,
+            'buyer_sub': ticket.keycloak_sub,
+            'code': ticket.code,
+            'created_at': datetime.utcnow().isoformat(),
+        }
+        channel.basic_publish(
+            exchange='',
+            routing_key='ticket_booked',
+            body=json.dumps(payload).encode('utf-8'),
+        )
+        connection.close()
+    except Exception as e:
+        # Pentru demo, doar logăm eroarea fără să stricăm flow-ul principal
+        print(f"Error publishing RabbitMQ notification: {e}")
+
+
 # Routes
 @app.route('/health', methods=['GET'])
 def health():
@@ -234,6 +301,7 @@ def get_event(event_id):
 
 @app.route('/events/<int:event_id>/tickets', methods=['POST'])
 @verify_token
+@rate_limit(max_requests=2, window_seconds=60)
 def buy_ticket(event_id):
     """Cumpără un bilet pentru utilizatorul curent."""
     if is_banned(request.user_sub):
@@ -257,6 +325,9 @@ def buy_ticket(event_id):
     db.session.add(ticket)
     db.session.commit()
 
+    # publica notificare
+    publish_ticket_notification(ticket)
+
     return jsonify(ticket.to_dict()), 201
 
 
@@ -268,6 +339,28 @@ def my_tickets():
         return jsonify({'error': 'User is banned'}), 403
     tickets = Ticket.query.filter_by(keycloak_sub=request.user_sub).all()
     return jsonify([t.to_dict() for t in tickets]), 200
+
+
+@app.route('/scan/<code>', methods=['POST'])
+@require_role('ADMIN', 'ORGANIZER', 'STAFF')
+def scan_ticket(code):
+    """Validează un bilet după cod și îl marchează ca folosit."""
+    ticket = Ticket.query.filter_by(code=code).first()
+    if not ticket:
+        return jsonify({'valid': False, 'error': 'Ticket not found'}), 404
+
+    if ticket.used_at is not None:
+        return jsonify({
+            'valid': False,
+            'error': 'Ticket already used',
+            'ticket': ticket.to_dict(),
+        }), 400
+
+    ticket.used_at = datetime.utcnow()
+    ticket.used_by = getattr(request, 'user_sub', None)
+    db.session.commit()
+
+    return jsonify({'valid': True, 'ticket': ticket.to_dict()}), 200
 
 
 @app.route('/admin/banned', methods=['GET'])

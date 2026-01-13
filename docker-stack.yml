@@ -125,6 +125,7 @@ services:
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:-eventflow}
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-eventflow-api}
       PORT: 3005
+      RABBITMQ_HOST: rabbitmq
     ports:
       - "3005:3005"
     networks:
@@ -141,6 +142,41 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # RabbitMQ pentru sistemul de notificări
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - internal-network
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  # Notification Service (consumează din RabbitMQ)
+  notification-service:
+    image: eventflow/notification-service:latest
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-eventflow}:${POSTGRES_PASSWORD:-eventflow}@postgres:5432/${POSTGRES_DB:-eventflow}
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-eventflow}
+      KEYCLOAK_PUBLIC_URL: http://localhost:8080
+      RABBITMQ_HOST: rabbitmq
+      PORT: 3006
+    ports:
+      - "3006:3006"
+    networks:
+      - internal-network
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.role == manager
 
 volumes:
   postgres-data:

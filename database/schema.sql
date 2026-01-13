@@ -43,7 +43,9 @@ CREATE TABLE IF NOT EXISTS tickets (
     event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     keycloak_sub VARCHAR(255) NOT NULL,
     code VARCHAR(32) NOT NULL,
-    purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    used_at TIMESTAMP,
+    used_by VARCHAR(255)
 );
 
 CREATE INDEX IF NOT EXISTS idx_tickets_event_id ON tickets(event_id);
@@ -54,6 +56,16 @@ CREATE TABLE IF NOT EXISTS banned_users (
     id SERIAL PRIMARY KEY,
     keycloak_sub VARCHAR(255) UNIQUE NOT NULL,
     reason TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Notifications table (populat de notification-service din RabbitMQ)
+CREATE TABLE IF NOT EXISTS notifications (
+    id SERIAL PRIMARY KEY,
+    event_id INTEGER NOT NULL,
+    organizer_sub VARCHAR(255),
+    buyer_sub VARCHAR(255) NOT NULL,
+    code VARCHAR(32) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
