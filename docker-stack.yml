@@ -88,10 +88,7 @@ services:
     image: eventflow/user-profile-service:latest
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-eventflow}:${POSTGRES_PASSWORD:-eventflow}@postgres:5432/${POSTGRES_DB:-eventflow}
-      # URL intern folosit de container pentru a apela Keycloak (rețea Docker)
       KEYCLOAK_URL: http://keycloak:8080
-      # URL public al Keycloak, folosit în token-uri ca issuer (ce vede clientul)
-      KEYCLOAK_PUBLIC_URL: http://localhost:8080
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:-eventflow}
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-eventflow-api}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-}
@@ -124,8 +121,11 @@ services:
       KEYCLOAK_PUBLIC_URL: http://localhost:8080
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:-eventflow}
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-eventflow-api}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-}
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
       PORT: 3005
-      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     ports:
       - "3005:3005"
     networks:
@@ -143,29 +143,36 @@ services:
       timeout: 10s
       retries: 3
 
-  # RabbitMQ pentru sistemul de notificări
+  # RabbitMQ pentru notificări
   rabbitmq:
-    image: rabbitmq:3-management
+    image: rabbitmq:3.13-management
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "5678:5672"
+      - "15678:15672"
     networks:
       - internal-network
     deploy:
       replicas: 1
       restart_policy:
         condition: on-failure
+      placement:
+        constraints:
+          - node.role == manager
 
-  # Notification Service (consumează din RabbitMQ)
+  # Notification Service
   notification-service:
     image: eventflow/notification-service:latest
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-eventflow}:${POSTGRES_PASSWORD:-eventflow}@postgres:5432/${POSTGRES_DB:-eventflow}
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:-eventflow}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-eventflow-api}
       KEYCLOAK_PUBLIC_URL: http://localhost:8080
-      RABBITMQ_HOST: rabbitmq
       PORT: 3006
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     ports:
       - "3006:3006"
     networks:
