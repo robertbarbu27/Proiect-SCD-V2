@@ -48,6 +48,9 @@ export default function App() {
   const [evStartsAt, setEvStartsAt] = useState('');
   const [evTickets, setEvTickets] = useState(100);
   const [evDescription, setEvDescription] = useState('');
+  const [scanCode, setScanCode] = useState('');
+  const [scanResult, setScanResult] = useState('');
+  const [notifications, setNotifications] = useState('');
 
   useEffect(() => {
     loadEvents();
@@ -168,6 +171,58 @@ export default function App() {
 
   const isOrganizerOrAdmin =
     userInfo && userInfo.roles && (userInfo.roles.includes('ADMIN') || userInfo.roles.includes('ORGANIZER'));
+  const isStaffOrOrganizerOrAdmin =
+    userInfo &&
+    userInfo.roles &&
+    (userInfo.roles.includes('ADMIN') ||
+      userInfo.roles.includes('ORGANIZER') ||
+      userInfo.roles.includes('STAFF'));
+
+  async function scanTicket() {
+    if (!token) {
+      setScanResult('Please paste a STAFF/ORGANIZER/ADMIN token first.');
+      return;
+    }
+    if (!scanCode) {
+      setScanResult('Introduce un cod de bilet.');
+      return;
+    }
+    setScanResult('Checking...');
+    try {
+      const res = await fetch(`${API_BASE}/scan/${encodeURIComponent(scanCode)}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await res.json();
+      if (res.ok && data.valid) {
+        setScanResult(`VALID ticket for event "${data.ticket.event?.name || data.ticket.event_id}" (code ${data.ticket.code}).`);
+      } else {
+        setScanResult(`INVALID: ${data.error || 'unknown error'}`);
+      }
+    } catch (e) {
+      setScanResult(String(e));
+    }
+  }
+
+  async function loadNotifications() {
+    if (!token) {
+      setNotifications('Please paste an ORGANIZER/ADMIN token first.');
+      return;
+    }
+    try {
+      const res = await fetch('http://localhost:3006/notifications', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await res.json();
+      setNotifications(JSON.stringify(data, null, 2));
+    } catch (e) {
+      setNotifications(String(e));
+    }
+  }
 
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', background: '#0f172a', minHeight: '100vh', color: '#e5e7eb', padding: '2rem' }}>
@@ -285,6 +340,38 @@ export default function App() {
               ))}
             </div>
             <pre style={preStyle}>{myTicketsText}</pre>
+          </div>
+
+          <div style={cardStyle}>
+            <h2>5. Scan / validate ticket (STAFF / ORGANIZER / ADMIN)</h2>
+            {!isStaffOrOrganizerOrAdmin && (
+              <p style={{ fontSize: '0.85rem', color: '#9ca3af' }}>
+                Doar utilizatorii cu rol <strong>STAFF</strong>, <strong>ORGANIZER</strong> sau <strong>ADMIN</strong> pot valida bilete.
+              </p>
+            )}
+            {isStaffOrOrganizerOrAdmin && (
+              <>
+                <label style={labelStyle}>Ticket code</label>
+                <input
+                  style={inputStyle}
+                  value={scanCode}
+                  onChange={e => setScanCode(e.target.value)}
+                  placeholder="Introdu codul de pe bilet"
+                />
+                <button style={buttonStyle} onClick={scanTicket}>
+                  Validate ticket
+                </button>
+                <pre style={preStyle}>{scanResult}</pre>
+              </>
+            )}
+          </div>
+
+          <div style={cardStyle}>
+            <h2>6. Notificări (ORGANIZER / ADMIN)</h2>
+            <button style={secondaryButtonStyle} onClick={loadNotifications}>
+              Load notifications
+            </button>
+            <pre style={preStyle}>{notifications}</pre>
           </div>
         </div>
       </div>
