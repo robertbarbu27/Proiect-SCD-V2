@@ -374,3 +374,5 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:3004/profile/<keycloak_s
 - Variabilele de mediu sunt folosite pentru configurare (nu hardcoded)
 - Stack-ul este gata pentru producție (cu ajustări de securitate)
 
+s
+
