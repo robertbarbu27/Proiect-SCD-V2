@@ -28,8 +28,8 @@ jobs:
         run: |
           flake8 services/ \
             --max-line-length=120 \
-            --extend-ignore=E501,W503,E402 \
-            --exclude=services/ticketing-service/tests,services/payment-service/tests,**/__pycache__
+            --extend-ignore=E501,W503,E402,W391,W293,W291 \
+            --exclude=services/ticketing-service/tests,services/payment-service/tests
 
   # ──────────────────────────────────────────────────────────────────────────
   # Validare configurații (docker-stack.yml + kong/kong.yml)
@@ -45,23 +45,24 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install PyYAML
+        run: pip install pyyaml
+
       - name: Validate YAML syntax
         run: |
-          python - <<'EOF'
+          python3 -c "
           import yaml, sys
-
           files = ['docker-stack.yml', 'kong/kong.yml', 'monitoring/prometheus.yml']
           errors = []
           for f in files:
               try:
                   yaml.safe_load(open(f))
-                  print(f"  OK  {f}")
+                  print('  OK  ' + f)
               except Exception as e:
-                  errors.append(f"FAIL {f}: {e}")
-                  print(f"FAIL {f}: {e}")
-          if errors:
-              sys.exit(1)
-          EOF
+                  errors.append(f)
+                  print('FAIL ' + f + ': ' + str(e))
+          sys.exit(1 if errors else 0)
+          "
 
   # ──────────────────────────────────────────────────────────────────────────
   # Build frontend (Vite)

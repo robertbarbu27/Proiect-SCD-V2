@@ -13,7 +13,6 @@ from functools import wraps
 import secrets
 import pika
 import json
-import time
 import redis
 
 from rate_limiter import (
@@ -50,6 +49,7 @@ KEYCLOAK_CLIENT_ID = os.getenv('KEYCLOAK_CLIENT_ID', 'eventflow-api')
 KEYCLOAK_PUBLIC_URL = os.getenv('KEYCLOAK_PUBLIC_URL', KEYCLOAK_URL)
 
 db = SQLAlchemy(app)
+
 
 def _build_redis_client():
     redis_url = os.getenv('REDIS_URL', '').strip()
