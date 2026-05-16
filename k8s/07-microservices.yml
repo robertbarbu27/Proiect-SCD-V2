@@ -1,0 +1,333 @@
+# Toate cele 7 microservicii proprii EventFlow
+---
+# ── auth-service (port 3003) ────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: eventflow
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      containers:
+        - name: auth-service
+          image: eventflow/auth-service:latest
+          envFrom:
+            - configMapRef:
+                name: eventflow-config
+          env:
+            - name: PORT
+              value: "3003"
+          ports:
+            - containerPort: 3003
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3003
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: eventflow
+spec:
+  selector:
+    app: auth-service
+  ports:
+    - port: 3003
+      targetPort: 3003
+---
+# ── user-profile-service (port 3004) ───────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-profile-service
+  namespace: eventflow
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: user-profile-service
+  template:
+    metadata:
+      labels:
+        app: user-profile-service
+    spec:
+      containers:
+        - name: user-profile-service
+          image: eventflow/user-profile-service:latest
+          envFrom:
+            - configMapRef:
+                name: eventflow-config
+          env:
+            - name: PORT
+              value: "3004"
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-secrets
+                  key: KEYCLOAK_ADMIN_PASSWORD
+          ports:
+            - containerPort: 3004
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3004
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-profile-service
+  namespace: eventflow
+spec:
+  selector:
+    app: user-profile-service
+  ports:
+    - port: 3004
+      targetPort: 3004
+---
+# ── ticketing-service (port 3005, 2 replici) ───────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ticketing-service
+  namespace: eventflow
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ticketing-service
+  template:
+    metadata:
+      labels:
+        app: ticketing-service
+    spec:
+      containers:
+        - name: ticketing-service
+          image: eventflow/ticketing-service:latest
+          envFrom:
+            - configMapRef:
+                name: eventflow-config
+          env:
+            - name: PORT
+              value: "3005"
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-secrets
+                  key: KEYCLOAK_ADMIN_PASSWORD
+          ports:
+            - containerPort: 3005
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3005
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ticketing-service
+  namespace: eventflow
+spec:
+  selector:
+    app: ticketing-service
+  ports:
+    - port: 3005
+      targetPort: 3005
+---
+# ── notification-service (port 3006) ───────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: eventflow
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      containers:
+        - name: notification-service
+          image: eventflow/notification-service:latest
+          envFrom:
+            - configMapRef:
+                name: eventflow-config
+          env:
+            - name: PORT
+              value: "3006"
+          ports:
+            - containerPort: 3006
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3006
+            initialDelaySeconds: 15
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: eventflow
+spec:
+  selector:
+    app: notification-service
+  ports:
+    - port: 3006
+      targetPort: 3006
+---
+# ── gate-service (port 3007) ────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gate-service
+  namespace: eventflow
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gate-service
+  template:
+    metadata:
+      labels:
+        app: gate-service
+    spec:
+      containers:
+        - name: gate-service
+          image: eventflow/gate-service:latest
+          envFrom:
+            - configMapRef:
+                name: eventflow-config
+          env:
+            - name: PORT
+              value: "3007"
+          ports:
+            - containerPort: 3007
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3007
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gate-service
+  namespace: eventflow
+spec:
+  selector:
+    app: gate-service
+  ports:
+    - port: 3007
+      targetPort: 3007
+---
+# ── payment-service (port 3008) ─────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  namespace: eventflow
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+    spec:
+      containers:
+        - name: payment-service
+          image: eventflow/payment-service:latest
+          envFrom:
+            - configMapRef:
+                name: eventflow-config
+          env:
+            - name: PORT
+              value: "3008"
+          ports:
+            - containerPort: 3008
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3008
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-service
+  namespace: eventflow
+spec:
+  selector:
+    app: payment-service
+  ports:
+    - port: 3008
+      targetPort: 3008
+---
+# ── data-service (port 3009) ────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-service
+  namespace: eventflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: data-service
+  template:
+    metadata:
+      labels:
+        app: data-service
+    spec:
+      containers:
+        - name: data-service
+          image: eventflow/data-service:latest
+          envFrom:
+            - configMapRef:
+                name: eventflow-config
+          env:
+            - name: PORT
+              value: "3009"
+          ports:
+            - containerPort: 3009
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3009
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-service
+  namespace: eventflow
+spec:
+  selector:
+    app: data-service
+  ports:
+    - port: 3009
+      targetPort: 3009

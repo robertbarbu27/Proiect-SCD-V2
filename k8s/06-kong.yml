@@ -1,0 +1,129 @@
+# Kong API Gateway (DB-less, declarative config)
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kong-config
+  namespace: eventflow
+data:
+  kong.yml: |
+    _format_version: "3.0"
+    _transform: true
+
+    services:
+      - name: auth-service
+        url: http://auth-service:3003
+        routes:
+          - name: auth-route
+            paths: [/api/auth]
+            strip_path: true
+
+      - name: user-profile-service
+        url: http://user-profile-service:3004
+        routes:
+          - name: profile-route
+            paths: [/api/profile]
+            strip_path: true
+
+      - name: ticketing-service
+        url: http://ticketing-service:3005
+        routes:
+          - name: tickets-route
+            paths: [/api/tickets]
+            strip_path: true
+
+      - name: notification-service
+        url: http://notification-service:3006
+        routes:
+          - name: notify-route
+            paths: [/api/notify]
+            strip_path: true
+
+      - name: gate-service
+        url: http://gate-service:3007
+        routes:
+          - name: gate-route
+            paths: [/api/gate]
+            strip_path: true
+
+      - name: payment-service
+        url: http://payment-service:3008
+        routes:
+          - name: payment-route
+            paths: [/api/pay]
+            strip_path: true
+
+      - name: data-service
+        url: http://data-service:3009
+        routes:
+          - name: data-route
+            paths: [/api/data]
+            strip_path: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kong
+  namespace: eventflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kong
+  template:
+    metadata:
+      labels:
+        app: kong
+    spec:
+      containers:
+        - name: kong
+          image: kong:3.6-ubuntu
+          env:
+            - name: KONG_DATABASE
+              value: "off"
+            - name: KONG_DECLARATIVE_CONFIG
+              value: "/etc/kong/kong.yml"
+            - name: KONG_PROXY_ACCESS_LOG
+              value: "/dev/stdout"
+            - name: KONG_ADMIN_ACCESS_LOG
+              value: "/dev/stdout"
+            - name: KONG_PROXY_ERROR_LOG
+              value: "/dev/stderr"
+            - name: KONG_ADMIN_ERROR_LOG
+              value: "/dev/stderr"
+            - name: KONG_ADMIN_LISTEN
+              value: "0.0.0.0:8001"
+          ports:
+            - containerPort: 8000
+            - containerPort: 8001
+          volumeMounts:
+            - name: kong-config
+              mountPath: /etc/kong
+          livenessProbe:
+            exec:
+              command: ["kong", "health"]
+            initialDelaySeconds: 15
+            periodSeconds: 30
+      volumes:
+        - name: kong-config
+          configMap:
+            name: kong-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kong
+  namespace: eventflow
+spec:
+  selector:
+    app: kong
+  ports:
+    - name: proxy
+      port: 8000
+      targetPort: 8000
+      nodePort: 30020
+    - name: admin
+      port: 8001
+      targetPort: 8001
+      nodePort: 30021
+  type: NodePort
