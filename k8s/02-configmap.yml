@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: eventflow-config
+  namespace: eventflow
+data:
+  POSTGRES_DB: "eventflow"
+  POSTGRES_USER: "eventflow"
+  KEYCLOAK_REALM: "eventflow"
+  KEYCLOAK_CLIENT_ID: "eventflow-api"
+  KEYCLOAK_ADMIN: "admin"
+  KEYCLOAK_HOSTNAME: "keycloak"
+  KEYCLOAK_URL: "http://keycloak:8080"
+  KEYCLOAK_PUBLIC_URL: "http://localhost:8080"
+  DATABASE_URL: "postgresql://eventflow:eventflow@postgres:5432/eventflow"
+  REDIS_URL: "redis://redis:6379/0"
+  RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+  RABBITMQ_HOST: "rabbitmq"
+  RATE_LIMIT_BACKEND: "redis"
+  CACHE_ENABLED: "1"
+  CACHE_TTL_SECONDS: "5"
+  PGADMIN_EMAIL: "admin@eventflow.local"
+  GRAFANA_USER: "admin"

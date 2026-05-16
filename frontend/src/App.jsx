@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 
-const API_BASE = 'http://localhost:3005'; // ticketing-service
-const GATE_API_BASE = 'http://localhost:3007'; // gate-service pentru scanare
-const PAYMENT_API_BASE = 'http://localhost:3008'; // payment-service pentru rezervare + plata
+const KONG_BASE = 'http://localhost:8020/api';
+const API_BASE = `${KONG_BASE}/tickets`;        // ticketing-service via Kong
+const GATE_API_BASE = `${KONG_BASE}/gate`;      // gate-service via Kong
+const PAYMENT_API_BASE = `${KONG_BASE}/pay`;    // payment-service via Kong
+const NOTIFY_API_BASE = `${KONG_BASE}/notify`;  // notification-service via Kong
 const KEYCLOAK_BASE = 'http://localhost:8080/realms/eventflow/protocol/openid-connect';
 const FRONTEND_CLIENT_ID = 'eventflow-frontend';
 
@@ -353,7 +355,7 @@ export default function App() {
     }
     setNotifications('Se încarcă notificările...');
     try {
-      const res = await fetch('http://localhost:3006/notifications', {
+      const res = await fetch(`${NOTIFY_API_BASE}/notifications`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -372,7 +374,7 @@ export default function App() {
     }
     setMyUserNotificationsText('Se încarcă notificările tale...');
     try {
-      const res = await fetch('http://localhost:3006/my-notifications', {
+      const res = await fetch(`${NOTIFY_API_BASE}/my-notifications`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

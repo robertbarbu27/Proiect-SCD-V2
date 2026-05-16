@@ -1,0 +1,106 @@
+# Servicii suport: pgAdmin (utilitar DB) + Portainer (cluster management)
+---
+# ── pgAdmin 4 ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgadmin
+  namespace: eventflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pgadmin
+  template:
+    metadata:
+      labels:
+        app: pgadmin
+    spec:
+      containers:
+        - name: pgadmin
+          image: dpage/pgadmin4:8.6
+          env:
+            - name: PGADMIN_DEFAULT_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: eventflow-config
+                  key: PGADMIN_EMAIL
+            - name: PGADMIN_DEFAULT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: eventflow-secrets
+                  key: PGADMIN_PASSWORD
+            - name: PGADMIN_LISTEN_PORT
+              value: "5059"
+          ports:
+            - containerPort: 5059
+          volumeMounts:
+            - name: pgadmin-data
+              mountPath: /var/lib/pgadmin
+      volumes:
+        - name: pgadmin-data
+          persistentVolumeClaim:
+            claimName: pgadmin-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgadmin
+  namespace: eventflow
+spec:
+  selector:
+    app: pgadmin
+  ports:
+    - port: 5059
+      targetPort: 5059
+      nodePort: 30059
+  type: NodePort
+---
+# ── Portainer ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portainer
+  namespace: eventflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portainer
+  template:
+    metadata:
+      labels:
+        app: portainer
+    spec:
+      containers:
+        - name: portainer
+          image: portainer/portainer-ce:2.21.0
+          args: ["-H", "unix:///var/run/docker.sock"]
+          ports:
+            - containerPort: 9000
+          volumeMounts:
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+            - name: portainer-data
+              mountPath: /data
+      volumes:
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+        - name: portainer-data
+          persistentVolumeClaim:
+            claimName: portainer-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: portainer
+  namespace: eventflow
+spec:
+  selector:
+    app: portainer
+  ports:
+    - port: 9000
+      targetPort: 9000
+      nodePort: 30900
+  type: NodePort
